@@ -407,3 +407,131 @@ class Database:
             ORDER BY prize_stddev ASC
         ''')
         return records
+
+    async def get_rating_by_win_streak(self):
+        if not self._connected():
+            return []
+
+        records = await self._connect.fetch('''
+            WITH player_games AS (
+                -- Шаг 1: Получаем все игры каждого игрока с отметкой о выигрыше
+                SELECT
+                    gp.player_id,
+                    p.name as player_name,
+                    g.id as game_id,
+                    g.created,
+                    CASE
+                        WHEN gp.prize > 0 THEN 1  -- Выигрыш
+                        ELSE 0                     -- Проигрыш
+                    END as is_win
+                FROM game_player gp
+                JOIN game g ON g.id = gp.game_id
+                JOIN player p ON p.id = gp.player_id
+                WHERE g.game_type_id = 1
+            ),
+            streak_groups AS (
+                -- Шаг 2: Определяем группы последовательных игр без проигрышей
+                -- Ключевая идея: считаем количество проигрышей (is_win = 0) до текущей строки
+                SELECT
+                    player_id,
+                    player_name,
+                    game_id,
+                    created,
+                    is_win,
+                    COUNT(CASE WHEN is_win = 0 THEN 1 END)
+                        OVER (PARTITION BY player_id ORDER BY created) as loss_group
+                FROM player_games
+            ),
+            streaks AS (
+                -- Шаг 3: Считаем длину каждой серии без проигрышей
+                SELECT
+                    player_id,
+                    player_name,
+                    loss_group,
+                    COUNT(*) as streak_length
+                FROM streak_groups
+                WHERE is_win = 1  -- Учитываем только выигрышные игры
+                GROUP BY player_id, player_name, loss_group
+            ),
+            max_streaks AS (
+                -- Шаг 4: Для каждого игрока находим максимальную серию
+                SELECT
+                    player_id,
+                    player_name,
+                    MAX(streak_length) as max_streak
+                FROM streaks
+                GROUP BY player_id, player_name
+            )
+            -- Шаг 5: Выводим результат, включая игроков без выигрышей
+            SELECT
+                p.name as player_name,
+                COALESCE(ms.max_streak, 0) as max_streak_without_loss
+            FROM player p
+            LEFT JOIN max_streaks ms ON ms.player_id = p.id
+            ORDER BY max_streak_without_loss DESC, player_name;
+        ''')
+        return records
+
+    async def get_rating_by_loss_streak(self):
+        if not self._connected():
+            return []
+
+        records = await self._connect.fetch('''
+            WITH player_games AS (
+                -- Шаг 1: Получаем все игры каждого игрока с отметкой о проигрыше
+                SELECT
+                    gp.player_id,
+                    p.name as player_name,
+                    g.id as game_id,
+                    g.created,
+                    CASE
+                        WHEN gp.prize > 0 THEN 0  -- Выигрыш
+                        ELSE 1                    -- Проигрыш
+                    END as is_loss
+                FROM game_player gp
+                JOIN game g ON g.id = gp.game_id
+                JOIN player p ON p.id = gp.player_id
+                WHERE g.game_type_id = 1
+            ),
+            streak_groups AS (
+                -- Шаг 2: Определяем группы последовательных игр без выигрышей
+                -- Ключевая идея: считаем количество выигрышей (is_loss = 0) до текущей строки
+                SELECT
+                    player_id,
+                    player_name,
+                    game_id,
+                    created,
+                    is_loss,
+                    COUNT(CASE WHEN is_loss = 0 THEN 1 END)
+                        OVER (PARTITION BY player_id ORDER BY created) as win_group
+                FROM player_games
+            ),
+            streaks AS (
+                -- Шаг 3: Считаем длину каждой серии без выигрышей
+                SELECT
+                    player_id,
+                    player_name,
+                    win_group,
+                    COUNT(*) as streak_length
+                FROM streak_groups
+                WHERE is_loss = 1  -- Учитываем только проигрышные игры
+                GROUP BY player_id, player_name, win_group
+            ),
+            max_streaks AS (
+                -- Шаг 4: Для каждого игрока находим максимальную серию
+                SELECT
+                    player_id,
+                    player_name,
+                    MAX(streak_length) as max_streak
+                FROM streaks
+                GROUP BY player_id, player_name
+            )
+            -- Шаг 5: Выводим результат, включая игроков без выигрышей
+            SELECT
+                p.name as player_name,
+                COALESCE(ms.max_streak, 0) as max_streak_without_win
+            FROM player p
+            LEFT JOIN max_streaks ms ON ms.player_id = p.id
+            ORDER BY max_streak_without_win DESC, player_name;
+        ''')
+        return records

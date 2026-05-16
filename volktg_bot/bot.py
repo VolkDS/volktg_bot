@@ -33,6 +33,8 @@ class TGBot:
         self._dp.message.register(self._poker_top_worstgames_handler, Command("top_worstgames"))
         self._dp.message.register(self._poker_top_bankroll_handler, Command("top_bankroll"))
         self._dp.message.register(self._poker_top_stability_handler, Command("top_stability"))
+        self._dp.message.register(self._poker_top_winstreak_handler, Command("top_winstreak"))
+        self._dp.message.register(self._poker_top_lossstreak_handler, Command("top_lossstreak"))
         self._dp.message.register(self._poker_top_best_handler, Command("top_best"))
 
         self._dp.message.register(self._message_handler)
@@ -61,6 +63,8 @@ class TGBot:
             BotCommand(command="top_worstgames", description="Топ по крупнейшим проигрышам"),
             BotCommand(command="top_bankroll", description="Топ по открутке банка"),
             BotCommand(command="top_stability", description="Топ по стабильности"),
+            BotCommand(command="top_winstreak", description="Топ по выигрышам подряд"),
+            BotCommand(command="top_lossstreak", description="Топ по проигрышам подряд"),
             BotCommand(command="top_best", description="Топ самых самых")
         ])
 
@@ -342,4 +346,32 @@ class TGBot:
             table.add_row([rec['name'], rec['games'], rec['prize_stddev'], rec['avg_prize']])
 
         response = '🏆 Топ игроков с самым предсказуемым результатом:\n```\n{}```'.format(table.get_string())
+        await message.answer(response, parse_mode='Markdown')
+
+    async def _poker_top_winstreak_handler(self, message: Message):
+        log.debug(f"{self._log_prefix(message)}: POKER TOP WINSTREAK")
+
+        records = await self._pr.get_rating_by_win_streak()
+        table = PrettyTable()
+        table.field_names = ['Имя', 'Win Streak']
+        table.align['Имя'] = "l"
+        table.align['Win Streak'] = "c"
+        for rec in records:
+            table.add_row([rec['player_name'], rec['max_streak_without_loss']])
+
+        response = '🏆 Топ игроков по выигранным играм подряд:\n```\n{}```'.format(table.get_string())
+        await message.answer(response, parse_mode='Markdown')
+
+    async def _poker_top_lossstreak_handler(self, message: Message):
+        log.debug(f"{self._log_prefix(message)}: POKER TOP LOSSSTREAK")
+
+        records = await self._pr.get_rating_by_loss_streak()
+        table = PrettyTable()
+        table.field_names = ['Имя', 'Loss Streak']
+        table.align['Имя'] = "l"
+        table.align['Loss Streak'] = "c"
+        for rec in records:
+            table.add_row([rec['player_name'], rec['max_streak_without_win']])
+
+        response = '🏆 Топ игроков по проигранным играм подряд:\n```\n{}```'.format(table.get_string())
         await message.answer(response, parse_mode='Markdown')

@@ -49,7 +49,7 @@ class PokerRating:
 
     async def get_cash_by_roi(self):
         return await self._db.get_cash_by_roi()
-    
+
     async def get_rating_by_games(self):
         return await self._db.get_rating_by_games()
 
@@ -61,3 +61,9 @@ class PokerRating:
 
     async def get_personal_stat(self, name):
         return await self._db.get_personal_stat(name)
+
+    async def get_rating_by_win_streak(self):
+        return await self._db.get_rating_by_win_streak()
+
+    async def get_rating_by_loss_streak(self):
+        return await self._db.get_rating_by_loss_streak()
